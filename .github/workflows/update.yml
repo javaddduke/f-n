@@ -34,30 +34,37 @@ jobs:
             echo "requirements.txt not found, skipping installation."
           fi
 
-      # 加上 -u 参数，让 Python 的 print 日志立刻刷新出来
+      # 1. 运行你的爬虫脚本
       - name: Run collect and update script
         run: |
           echo "=== 开始执行爬虫脚本 ==="
           python -u scraper.py
           echo "=== 脚本执行完毕 ==="
 
-      # 【新增排查步骤】强行查看脚本到底生成或修改了什么文件
-      - name: Check generated files
+      # 2. 【核心排查】检查生成的 output 文件大小和内容
+      - name: Inspect output files
         run: |
-          echo "=== 检查当前工作区状态 ==="
-          git status
-          echo "=== 检查是否有新文件诞生 ==="
-          git status --porcelain
+          echo "=== 检查输出文件夹内容 ==="
+          ls -lh output/ || ls -lh
+          
+          echo "=== 检查 nodes.txt 前 5 行 ==="
+          head -n 5 output/nodes.txt || echo "nodes.txt 无法读取"
+          
+          echo "=== 检查 sub.txt 前 5 行 ==="
+          head -n 5 output/sub.txt || echo "sub.txt 无法读取"
 
+      # 3. 自动提交变动
       - name: Commit and push changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
+          # 强制将所有新生成和修改的文件加入缓存区
+          git add output/nodes.txt output/sub.txt || git add .
+          
           if [ -n "$(git status --porcelain)" ]; then
-            git add .
             git commit -m "chore: 自动更新节点数据 [$(date +'%Y-%m-%d %H:%M:%S')]"
             git push origin HEAD:main
           else
-            echo "提示：由于节点数据没有发生任何变化，本次跳过提交。"
+            echo "提示：文件内容没有发生任何实质性变化，跳过本次推送。"
           fi
