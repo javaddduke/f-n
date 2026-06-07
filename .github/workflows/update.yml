@@ -10,13 +10,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 锁定到明确修复了 Node 24 警告的 checkout 最新子版本
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
         with:
           persist-credentials: true
 
-      # 2. 锁定到明确修复了 Node 24 警告的 setup-python 最新子版本
       - name: Set up Python
         uses: actions/setup-python@v5.4.0
         with:
@@ -31,6 +29,13 @@ jobs:
             echo "requirements.txt not found, skipping installation."
           fi
 
+      # 【新增】debug 步骤：帮你看看仓库里到底有哪些文件
+      - name: List files in repository (Debug)
+        run: |
+          echo "=== 当前目录下的所有文件如下 ==="
+          ls -R
+
+      # 运行脚本（如果是子目录，可以改成 python 文件夹名/main.py）
       - name: Run collect and update script
         run: |
           python main.py
