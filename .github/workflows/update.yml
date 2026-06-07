@@ -1,13 +1,10 @@
 name: build-and-update
 
 on:
-  # 自动定时触发：每 6 小时自动执行一次（可以根据你原文件的 cron 自行调整）
   schedule:
     - cron: '0 */6 * * *'
-  # 支持在 GitHub 页面上手动点击按钮触发
   workflow_dispatch:
 
-# 提前开启 Node.js 24 环境，消除弃用警告
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -16,20 +13,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 签出代码（已升级至 v4，支持 Node 24）
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           persist-credentials: true
 
-      # 2. 部署 Python 环境（已升级至 v5，支持 Node 24）
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip' # 自动缓存依赖，加速后续运行
+          cache: 'pip'
 
-      # 3. 安装 Python 依赖包（如果你的项目有 requirements.txt）
       - name: Install dependencies
         run: |
           if [ -f requirements.txt ]; then
@@ -38,18 +32,15 @@ jobs:
             echo "requirements.txt not found, skipping installation."
           fi
 
-      # 4. 执行你的核心 Python 脚本（请确保这里的脚本文件名与你仓库中的一致）
       - name: Run collect and update script
         run: |
           python main.py
 
-      # 5. 自动将更新后的节点数据提交并推送到 GitHub 仓库
       - name: Commit and push changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # 检查是否有文件变动，如果有则提交
           if [ -n "$(git status --porcelain)" ]; then
             git add .
             git commit -m "chore: 自动更新节点数据 [$(date +'%Y-%m-%d %H:%M:%S')]"
