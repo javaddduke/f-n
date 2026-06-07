@@ -5,6 +5,9 @@ on:
     - cron: '0 */6 * * *'
   workflow_dispatch:
 
+# 明确声明该工作流拥有对仓库的写入权限，防止 403 错误
+permissions: write-all
+
 jobs:
   build-and-update-job:
     runs-on: ubuntu-latest
@@ -29,13 +32,7 @@ jobs:
             echo "requirements.txt not found, skipping installation."
           fi
 
-      # 【新增】debug 步骤：帮你看看仓库里到底有哪些文件
-      - name: List files in repository (Debug)
-        run: |
-          echo "=== 当前目录下的所有文件如下 ==="
-          ls -R
-
-      # 运行脚本（如果是子目录，可以改成 python 文件夹名/main.py）
+      # 已经成功修改为精准运行 scraper.py
       - name: Run collect and update script
         run: |
           python scraper.py
@@ -48,7 +45,7 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             git add .
             git commit -m "chore: 自动更新节点数据 [$(date +'%Y-%m-%d %H:%M:%S')]"
-            git push origin main
+            git push origin HEAD:main
           else
             echo "No changes detected. Skipping commit."
           fi
