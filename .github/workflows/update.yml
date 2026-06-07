@@ -5,19 +5,18 @@ on:
     - cron: '0 */6 * * *'
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build-and-update-job:
     runs-on: ubuntu-latest
 
     steps:
+      # 使用全面支持 Node 24 的 checkout 内部最新提交
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           persist-credentials: true
 
+      # 使用全面支持 Node 24 的 setup-python 内部最新提交
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
