@@ -2,14 +2,14 @@ import requests
 import base64
 import os
 import json
+import re
 from datetime import datetime
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 # ================= ⚙️ 核心配置区 ⚙️ =================
 
 CUSTOM_REMARK_B64 = "56eR5oqA5YWx5LqrLeW8gOa6kOiKgueCuQ=="
 
-# 2. 节点订阅源库（随时可在末尾追加新链接）
 SOURCE_URLS = [
     "https://cdn.jsdelivr.net/gh/Pawdroid/Free-servers@main/sub",
     "https://cdn.jsdelivr.net/gh/mfuu/v2ray@master/v2ray",
@@ -35,15 +35,14 @@ SOURCE_URLS = [
     "https://gt.1155555.xyz/https://raw.githubusercontent.com/shaoyouvip/free/refs/heads/main/base64.txt" 
 ]
 
-# 3. 垃圾节点过滤黑名单（可自行添加别人节点里的广告词过滤掉）
-BLACKLIST_KEYWORDS = ['-1', '127.0.0.1', 'timeout', 'err', '错误', '剩余', '到期', '官网', 'mibei77', '别买']
+BLACKLIST_KEYWORDS = ['-1', '127.0.0.1', 'timeout', 'err', '错误', '剩余', '到期', '官网', 'mibei77', '别买', '回国', '中国']
 
 # ====================================================
 
 SUPPORTED_PROTOCOLS = ('vmess://', 'vless://', 'ss://', 'ssr://', 'trojan://', 'tuic://', 'hysteria2://')
 
 def fetch_and_decode(url):
-    if not url or not url.strip(): # 过滤掉不小心留空的链接
+    if not url or not url.strip():
         return []
     try:
         print(f"[*] 正在抓取: {url}")
@@ -63,25 +62,45 @@ def fetch_and_decode(url):
         print(f"[!] 抓取失败 {url}: {e}")
         return []
 
+def get_pure_config(link):
+    """提取去重核心：彻底剥离原本的别名/备注，只保留核心连接参数进行去重"""
+    if link.startswith("vmess://"):
+        try:
+            b64_str = link[8:].strip()
+            padding = 4 - (len(b64_str) % 4)
+            if padding != 4: b64_str += "=" * padding
+            v_json = json.loads(base64.b64decode(b64_str).decode('utf-8', errors='ignore'))
+            # 抹除无意义的别名项，防止干扰去重
+            v_json['ps'] = ""
+            return f"vmess://{json.dumps(v_json, sort_keys=True)}"
+        except:
+            return link
+    elif "#" in link:
+        return link.split("#", 1)[0] # 剥离 # 后面的名字
+    return link
+
 def rename_node(link, index):
-    
-   
     try:
         custom_remark = base64.b64decode(CUSTOM_REMARK_B64).decode('utf-8')
     except Exception:
-        custom_remark = "Node" # 万一解码失败的保底名字
+        custom_remark = "Node"
         
     new_name = f"{custom_remark} {index:03d}"
     
     if link.startswith("vmess://"):
         try:
+            # 如果是已经提取过的纯净 JSON 格式
+            if link.startswith("vmess://{"):
+                v_json = json.loads(link[8:])
+                v_json['ps'] = new_name
+                new_b64 = base64.b64encode(json.dumps(v_json, ensure_ascii=False).encode('utf-8')).decode('utf-8')
+                return f"vmess://{new_b64}"
+            
             b64_str = link[8:]
             padding = 4 - (len(b64_str) % 4)
             if padding != 4: b64_str += "=" * padding
-            
             v_json = json.loads(base64.b64decode(b64_str).decode('utf-8'))
-            v_json['ps'] = new_name  # 强行覆盖 VMess 别名
-            
+            v_json['ps'] = new_name
             new_b64 = base64.b64encode(json.dumps(v_json, ensure_ascii=False).encode('utf-8')).decode('utf-8')
             return f"vmess://{new_b64}"
         except Exception:
@@ -89,11 +108,7 @@ def rename_node(link, index):
             
     elif any(link.startswith(p) for p in ['vless://', 'trojan://', 'ss://', 'ssr://', 'tuic://', 'hysteria2://']):
         try:
-            # 兼容处理：防范原本就不带 # 备注符号的特殊链接
-            if "#" in link:
-                base_link = link.split("#", 1)[0]
-            else:
-                base_link = link
+            base_link = link.split("#", 1)[0]
             return f"{base_link}#{quote(new_name)}"
         except Exception:
             return link
@@ -107,31 +122,33 @@ def main():
     for url in SOURCE_URLS:
         all_lines.extend(fetch_and_decode(url))
         
-    valid_nodes = []
+    seen_configs = set()
+    unique_nodes = []
     
     for line in all_lines:
         line = line.strip()
         if not line.startswith(SUPPORTED_PROTOCOLS):
             continue
             
-        # 黑名单过滤
-        is_bad = any(keyword.lower() in line.lower() for keyword in BLACKLIST_KEYWORDS)
-        if is_bad:
+        # 黑名单初步过滤
+        if any(keyword.lower() in line.lower() for keyword in BLACKLIST_KEYWORDS):
             continue
             
-        valid_nodes.append(line)
-        
-    # 去重
-    valid_nodes = list(set(valid_nodes))
-    
-    print(f"[*] 清洗完毕，正在进行全自动重命名...")
+        # 核心高级去重机制
+        pure_config = get_pure_config(line)
+        if pure_config not in seen_configs:
+            seen_configs.add(pure_config)
+            unique_nodes.append(pure_config) # 暂存纯净配置
+            
+    print(f"[*] 全网初始节点：{len(all_lines)} 行 -> 深度穿透去重后真实独立节点：{len(unique_nodes)} 个")
+    print(f"[*] 正在进行全自动重命名排序...")
     
     final_nodes = []
-    for i, node in enumerate(valid_nodes, 1):
+    for i, node in enumerate(unique_nodes, 1):
         renamed_node = rename_node(node, i)
         final_nodes.append(renamed_node)
         
-    print(f"[*] 成功生成 {len(final_nodes)} 个定制化节点！")
+    print(f"[*] 成功生成 {len(final_nodes)} 个优质定制化节点！")
     
     raw_text = "\n".join(final_nodes)
     sub_base64 = base64.b64encode(raw_text.encode('utf-8')).decode('utf-8')
@@ -141,6 +158,7 @@ def main():
         f.write(raw_text)
     with open('output/sub.txt', 'w', encoding='utf-8') as f:
         f.write(sub_base64)
+    print("[*] 结果已成功写入 output 文件夹。")
 
 if __name__ == "__main__":
     main()
