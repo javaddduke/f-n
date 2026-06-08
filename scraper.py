@@ -2,13 +2,15 @@ import requests
 import base64
 import os
 import json
-import re
 from datetime import datetime
-from urllib.parse import quote, urlparse
+from urllib.parse import quote
 
 # ================= ⚙️ 核心配置区 ⚙️ =================
 
 CUSTOM_REMARK_B64 = "56eR5oqA5YWx5LqrLeW8gOa6kOiKgueCuQ=="
+
+# 最大保留节点数（强烈建议 1000-2000，既保证节点够用，又能让文件体积在 1MB 左右，秒推送不卡顿）
+MAX_NODES_LIMIT = 1500 
 
 SOURCE_URLS = [
     "https://cdn.jsdelivr.net/gh/Pawdroid/Free-servers@main/sub",
@@ -63,20 +65,18 @@ def fetch_and_decode(url):
         return []
 
 def get_pure_config(link):
-    """提取去重核心：彻底剥离原本的别名/备注，只保留核心连接参数进行去重"""
     if link.startswith("vmess://"):
         try:
             b64_str = link[8:].strip()
             padding = 4 - (len(b64_str) % 4)
             if padding != 4: b64_str += "=" * padding
             v_json = json.loads(base64.b64decode(b64_str).decode('utf-8', errors='ignore'))
-            # 抹除无意义的别名项，防止干扰去重
             v_json['ps'] = ""
             return f"vmess://{json.dumps(v_json, sort_keys=True)}"
         except:
             return link
     elif "#" in link:
-        return link.split("#", 1)[0] # 剥离 # 后面的名字
+        return link.split("#", 1)[0]
     return link
 
 def rename_node(link, index):
@@ -89,7 +89,6 @@ def rename_node(link, index):
     
     if link.startswith("vmess://"):
         try:
-            # 如果是已经提取过的纯净 JSON 格式
             if link.startswith("vmess://{"):
                 v_json = json.loads(link[8:])
                 v_json['ps'] = new_name
@@ -130,17 +129,21 @@ def main():
         if not line.startswith(SUPPORTED_PROTOCOLS):
             continue
             
-        # 黑名单初步过滤
         if any(keyword.lower() in line.lower() for keyword in BLACKLIST_KEYWORDS):
             continue
             
-        # 核心高级去重机制
         pure_config = get_pure_config(line)
         if pure_config not in seen_configs:
             seen_configs.add(pure_config)
-            unique_nodes.append(pure_config) # 暂存纯净配置
+            unique_nodes.append(pure_config)
             
-    print(f"[*] 全网初始节点：{len(all_lines)} 行 -> 深度穿透去重后真实独立节点：{len(unique_nodes)} 个")
+    print(f"[*] 全网初始节点：{len(all_lines)} 行 -> 深度去重后独立节点：{len(unique_nodes)} 个")
+    
+    # 【核心改动】进行数量截取，只保留最新/前 MAX_NODES_LIMIT 个节点，防止文件过大卡死推送
+    if len(unique_nodes) > MAX_NODES_LIMIT:
+        print(f"[!] 节点数过多，为了推送和客户端加载效率，精选前 {MAX_NODES_LIMIT} 个节点进行保留")
+        unique_nodes = unique_nodes[:MAX_NODES_LIMIT]
+        
     print(f"[*] 正在进行全自动重命名排序...")
     
     final_nodes = []
@@ -148,7 +151,7 @@ def main():
         renamed_node = rename_node(node, i)
         final_nodes.append(renamed_node)
         
-    print(f"[*] 成功生成 {len(final_nodes)} 个优质定制化节点！")
+    print(f"[*] 成功生成 {len(final_nodes)} 个精选定制化节点！")
     
     raw_text = "\n".join(final_nodes)
     sub_base64 = base64.b64encode(raw_text.encode('utf-8')).decode('utf-8')
